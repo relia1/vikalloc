@@ -9,13 +9,10 @@
 // Returns a pointer to the data within a block, as a void *.
 #define BLOCK_DATA(__curr) (((void *) __curr) + (BLOCK_SIZE))
 
-// Returns a pointer that is at the start of the next block
-// TODO I think this actually grabs the end of the current block
-#define NEXT_BLOCK(__curr, capacity) (((void *) __curr) + (capacity))
-
 // Returns a pointer to the structure containing the data, as a pointer
 // to the correct type.
-#define DATA_BLOCK(__data) ((heap_block_t *) (__data - BLOCK_SIZE))
+//#define DATA_BLOCK(__data) ((heap_block_t *) (__data - BLOCK_SIZE))
+#define DATA_BLOCK(__curr) (((void *) __curr) - (BLOCK_SIZE))
 
 // Returns 0 (false) if the block is NOT free, else 1 (true).
 #define IS_FREE(__curr) ((__curr -> size) == 0)
@@ -122,23 +119,24 @@ void vikalloc_set_log(FILE *stream)
 
 void * vikalloc(size_t size)
 {
-    heap_block_t *curr = NULL;
+    heap_block_t *curr = !!next_fit? next_fit->next : next_fit;
     size_t size_to_request = 0;
     size_t remainder = 0;
+    void * data_block = NULL;
 
     if (isVerbose) {
         fprintf(vikalloc_log_stream, ">> %d: %s entry: size = %lu\n"
                 , __LINE__, __FUNCTION__, size);
     }
 
-    if(low_water_mark == NULL) {
-	low_water_mark = sbrk(0);
-    }
-
     if (0 == size) {
         return NULL;
     }
 
+    if(low_water_mark == NULL) {
+	low_water_mark = sbrk(0);
+    }
+    
     // TODO likely needs a closer look
     remainder = (size + BLOCK_SIZE) % min_sbrk_size;
     if(remainder > 0) {
@@ -147,9 +145,32 @@ void * vikalloc(size_t size)
 	size_to_request = (size + BLOCK_SIZE) / min_sbrk_size;
     }
 
-    size_to_request = 1 + (size + BLOCK_SIZE) / min_sbrk_size;
-    //printf("blocks to request to request %ld\n", size_to_request);
-    //printf("block size %ld\n", min_sbrk_size);
+    // size_to_request *= min_sbrk_size;
+   
+    while(curr != next_fit) {
+	if(curr == NULL) {
+	    curr = block_list_head;
+	}
+
+	if((curr->capacity - curr->size) >= size){
+	    next_fit = (char *)curr + BLOCK_SIZE + curr->size;
+	    next_fit->next = (heap_block_t *)curr->next;
+	    next_fit->prev = (heap_block_t *)curr;
+	    curr->next = (heap_block_t *)next_fit;
+
+	    next_fit->size = size;
+	    next_fit->capacity = curr->capacity - curr->size;
+	    curr->capacity = curr->size;
+	    data_block = BLOCK_DATA(next_fit);
+	}
+
+	if(curr->next == NULL) {
+	    curr = block_list_head;
+	} else {
+	    curr = curr->next;
+	}
+    }
+
     // Check if our data structure is NULL and initialize it if so
     // This will involve a system call to sbrk()
     // Otherwise traverse the data structure to see if there is enough
@@ -157,16 +178,37 @@ void * vikalloc(size_t size)
     // If after traversal there isn't a place to hold the amount of memory
     // needed, then we have to make a system call to sbrk() for more memory
     if(block_list_head == NULL) {
-	block_list_head = sbrk(size_to_request);
+	block_list_head = sbrk(size_to_request * min_sbrk_size);
 	block_list_tail = block_list_head;
 	next_fit = block_list_head;
 	next_fit->size = size;
-	next_fit->capacity = size_to_request * min_sbrk_size;
+	next_fit->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
 	next_fit->prev = NULL;
 	next_fit->next = NULL;
-	high_water_mark = NEXT_BLOCK(low_water_mark, next_fit->capacity);
-	curr = BLOCK_DATA(next_fit);
+	high_water_mark = sbrk(0);
+	return BLOCK_DATA(next_fit);
     } else {
+	// wasn't a space to add our data, make a system call to sbrk to
+	// have more allocated
+	heap_block_t * new_heap_node = sbrk(size_to_request * min_sbrk_size);
+	new_heap_node->size = 0;
+	new_heap_node->capacity = 0;
+	new_heap_node->next = curr->next;
+	new_heap_node->prev = curr;
+	curr->next = new_heap_node;
+	curr->capacity = curr->size;
+	if(new_heap_node->next != NULL) {
+	    new_heap_node->next->prev = new_heap_node;
+	}
+	if(curr == block_list_tail) {
+	    block_list_tail = new_heap_node;
+	}   
+	next_fit = !!new_heap_node->next? new_heap_node->next : block_list_head;
+	new_heap_node->size = size;
+	new_heap_node->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
+	curr = new_heap_node;
+	high_water_mark = sbrk(0);
+	data_block = BLOCK_DATA(new_heap_node);
     }
 
 
@@ -175,22 +217,23 @@ void * vikalloc(size_t size)
         fprintf(vikalloc_log_stream, "<< %d: %s exit: size = %lu\n", __LINE__, __FUNCTION__, size);
     }
 
-// You need to return a pointer to the data, not a pointer to the structure
-    return curr; // Just a place holder.
+    return data_block;
 }
 
 void vikfree(void *ptr)
 {
     heap_block_t *curr = NULL;
     
-// Remember, the user passes you a pointer to the data, NOT the structure.
     if (ptr == NULL) {
         return;
     }
 
-// Do something like
-//            curr = SOME_COOL_MACRO(ptr);
-// You should make sure that curr is not NULL before proceeding.
+    curr = DATA_BLOCK(ptr);
+
+    if(curr == NULL) {
+	return;
+    }
+
     if (IS_FREE(curr)) {
         if (isVerbose) {
             fprintf(vikalloc_log_stream, "Block is already free: ptr = " PTR "\n"
@@ -198,6 +241,8 @@ void vikfree(void *ptr)
         }
         return;
     }
+
+    curr->size = 0;
 
 
 // A lot of stuff goes on in here, like coalesce
@@ -224,15 +269,18 @@ void vikalloc_reset(void)
 
 	block_list_head = NULL;
 	block_list_tail = NULL;
+	next_fit = NULL;
     }
 }
 
 void * vikcalloc(size_t nmemb, size_t size)
 {
-    void *ptr = NULL;
+    void *ptr = vikalloc(nmemb * size);
+    if(ptr == NULL) {
+	return NULL;
+    }
 
-// This is alomst tooooooo easy
-
+    memset(ptr, 0, nmemb * size);
     return ptr;
 }
 
