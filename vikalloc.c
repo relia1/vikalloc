@@ -9,6 +9,10 @@
 // Returns a pointer to the data within a block, as a void *.
 #define BLOCK_DATA(__curr) (((void *) __curr) + (BLOCK_SIZE))
 
+// Returns a pointer that is at the start of the next block
+// TODO I think this actually grabs the end of the current block
+#define NEXT_BLOCK(__curr, capacity) (((void *) __curr) + (capacity))
+
 // Returns a pointer to the structure containing the data, as a pointer
 // to the correct type.
 #define DATA_BLOCK(__data) ((heap_block_t *) (__data - BLOCK_SIZE))
@@ -129,7 +133,6 @@ void * vikalloc(size_t size)
 
     if(low_water_mark == NULL) {
 	low_water_mark = sbrk(0);
-	curr = low_water_mark;
     }
 
     if (0 == size) {
@@ -147,28 +150,33 @@ void * vikalloc(size_t size)
     size_to_request = 1 + (size + BLOCK_SIZE) / min_sbrk_size;
     //printf("blocks to request to request %ld\n", size_to_request);
     //printf("block size %ld\n", min_sbrk_size);
+    // Check if our data structure is NULL and initialize it if so
+    // This will involve a system call to sbrk()
+    // Otherwise traverse the data structure to see if there is enough
+    // memory already enough memory we can use
+    // If after traversal there isn't a place to hold the amount of memory
+    // needed, then we have to make a system call to sbrk() for more memory
     if(block_list_head == NULL) {
 	block_list_head = sbrk(size_to_request);
 	block_list_tail = block_list_head;
-	curr = curr + 1;
-	curr->size = size;
-	curr->capacity = size_to_request * min_sbrk_size;
-	curr->prev = NULL;
-	curr->next = NULL;
-	return curr;
+	next_fit = block_list_head;
+	next_fit->size = size;
+	next_fit->capacity = size_to_request * min_sbrk_size;
+	next_fit->prev = NULL;
+	next_fit->next = NULL;
+	high_water_mark = NEXT_BLOCK(low_water_mark, next_fit->capacity);
+	curr = BLOCK_DATA(next_fit);
+    } else {
     }
 
 
-
-
-// Lots and lots of stuff goes in here, like searching and splitting.
     
     if (isVerbose) {
         fprintf(vikalloc_log_stream, "<< %d: %s exit: size = %lu\n", __LINE__, __FUNCTION__, size);
     }
 
 // You need to return a pointer to the data, not a pointer to the structure
-    return NULL; // Just a place holder.
+    return curr; // Just a place holder.
 }
 
 void vikfree(void *ptr)
