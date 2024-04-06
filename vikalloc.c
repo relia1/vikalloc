@@ -2,6 +2,7 @@
 // rchaney@pdx.edu
 
 #include "vikalloc.h"
+#include <string.h>
 
 // Returns the size of the structure, in bytes.
 #define BLOCK_SIZE (sizeof(heap_block_t))
@@ -9,9 +10,7 @@
 // Returns a pointer to the data within a block, as a void *.
 #define BLOCK_DATA(__curr) (((void *) __curr) + (BLOCK_SIZE))
 
-// Returns a pointer to the structure containing the data, as a pointer
-// to the correct type.
-//#define DATA_BLOCK(__data) ((heap_block_t *) (__data - BLOCK_SIZE))
+// Returns a pointer to the structure containing the data
 #define DATA_BLOCK(__curr) (((void *) __curr) - (BLOCK_SIZE))
 
 // Returns 0 (false) if the block is NOT free, else 1 (true).
@@ -287,17 +286,39 @@ void * vikcalloc(size_t nmemb, size_t size)
 void * vikrealloc(void *ptr, size_t size)
 {
     heap_block_t *curr = NULL;
-    
-// Remember, the user passes you a pointer to the data, NOT the structure.
-// You need to return a pointer to data
-    
-    return ptr;
+    void * new_heap_node = NULL;
+    void * heap_node_data = NULL;
+
+    if(ptr == NULL) {
+	return vikalloc(size);
+    }
+
+    if(size == 0) {
+	vikfree(ptr);
+	return NULL;
+    }
+
+    curr = DATA_BLOCK(ptr);
+    if((curr->capacity - size) >= 0) {
+	curr->size = size;
+	return curr;
+    }
+
+    new_heap_node = vikalloc(size);
+    if(new_heap_node == NULL) {
+	return NULL;
+    }
+    memset(new_heap_node, 0, size);
+    heap_node_data = memcpy(new_heap_node, ptr, curr->size);
+    vikfree(ptr);
+    return new_heap_node;
 }
 
 void * vikstrdup(const char *s)
 {
+    return s? strcpy(vikalloc(strlen(s) + 1), s) : NULL;
 // Can you do this in one line? I was dared to and did.
-    return NULL; // this is just a place holder
+    // return NULL; // this is just a place holder
 }
 
 // This is unbelievably ugly.
