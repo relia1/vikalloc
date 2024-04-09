@@ -126,6 +126,8 @@ void * vikalloc(size_t size)
                 , __LINE__, __FUNCTION__, size);
     }
 
+    // printf("size %ld\n", size);
+
     if (0 == size) {
         return NULL;
     }
@@ -153,6 +155,7 @@ void * vikalloc(size_t size)
 	new_heap_node->prev = NULL;
 	block_list_head = new_heap_node;
 	block_list_tail = block_list_head;
+	high_water_mark = sbrk(0);
 	return BLOCK_DATA(next_fit);
     }
 
@@ -161,21 +164,24 @@ void * vikalloc(size_t size)
     // If there is a spot that already exists that can fufill our request we
     // need to perform a split
     do {
-	if((curr->capacity - curr->size) >= size){
+	if((curr->capacity - curr->size) >= (size + BLOCK_SIZE)){
 	    // perform split
 	    next_fit = (void *)curr + BLOCK_SIZE + curr->size;
 	    next_fit->next = curr->next;
 	    next_fit->prev = curr;
 	    next_fit->size = size;
-	    next_fit->capacity = curr->capacity - curr->size;
-	    if(next_fit->next == NULL) {
+	    next_fit->capacity = curr->capacity - curr->size - BLOCK_SIZE;
+	    if(next_fit->next == NULL) { 
 		block_list_tail = next_fit;
+	    } else {
+		next_fit->next->prev = next_fit;
 	    }
 
 	    curr->capacity = curr->size;
 	    curr->next = next_fit;
 	    data_block = BLOCK_DATA(next_fit);
-	    break;
+	    // break;
+	    return data_block;
 	}
 
 	if(curr->next == NULL) {
@@ -189,16 +195,21 @@ void * vikalloc(size_t size)
 	// wasn't a space to add our data, make a system call to sbrk to
 	// have more allocated
 	new_heap_node = sbrk(size_to_request * min_sbrk_size);
-	new_heap_node->next = curr->next;
-	new_heap_node->prev = curr;
-	curr->next = new_heap_node;
-	curr->capacity = curr->size;
+	new_heap_node->next = NULL;
+	new_heap_node->prev = block_list_tail;
+	new_heap_node->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
+	new_heap_node->size = size;
+	next_fit = new_heap_node;
+	block_list_tail->next = new_heap_node;
+	block_list_tail = new_heap_node;
+	/*
 	if(new_heap_node->next != NULL) {
 	    new_heap_node->next->prev = new_heap_node;
 	}
 	if(curr == block_list_tail) {
 	    block_list_tail = new_heap_node;
 	}
+	*/
 	data_block = BLOCK_DATA(new_heap_node);
     }
 
@@ -263,9 +274,11 @@ void coalesce_up(heap_block_t * ptr) {
 	next_fit = ptr;
     }
 
+    /*
     if(curr == block_list_tail) {
 	block_list_tail = ptr;
     }
+    */
     if(curr->next != NULL) {
 	curr->next->prev = ptr;
     }
@@ -359,6 +372,7 @@ void * vikrealloc(void *ptr, size_t size)
     heap_block_t *curr = NULL;
     void * new_heap_node = NULL;
     void * heap_node_data = NULL;
+    size_t old_size = 0;
 
     if(ptr == NULL) {
 	return vikalloc(size);
@@ -379,15 +393,17 @@ void * vikrealloc(void *ptr, size_t size)
     if(new_heap_node == NULL) {
 	return NULL;
     }
-    memset(new_heap_node, 0, size);
-    heap_node_data = memcpy(new_heap_node, ptr, curr->size);
+
+    // memset(new_heap_node, 0, size);
+    memcpy(new_heap_node, ptr, MIN(size, curr->size));
     vikfree(ptr);
     return new_heap_node;
 }
 
 void * vikstrdup(const char *s)
 {
-    return s? strcpy(vikalloc(strlen(s) + 1), s) : NULL;
+    // return s? strcpy(vikalloc(strlen(s) + 1), s) : NULL;
+    return strcpy(vikalloc(strlen(s)+1), s);
 }
 
 // This is unbelievably ugly.
