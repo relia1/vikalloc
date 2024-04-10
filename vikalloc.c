@@ -176,28 +176,33 @@ void * vikalloc(size_t size)
     // If there is a spot that already exists that can fufill our request we
     // need to perform a split
     do {
-	if((curr->capacity - curr->size) > (size + BLOCK_SIZE)){
-	    // perform split
-	    next_fit = (void *)curr + BLOCK_SIZE + curr->size;
-	    next_fit->next = curr->next;
-	    next_fit->prev = curr;
-	    next_fit->size = size;
-	    next_fit->capacity = curr->capacity - curr->size - BLOCK_SIZE;
-	    if(next_fit->next == NULL) { 
-		block_list_tail = next_fit;
+	if((curr->capacity - curr->size) >= (size + BLOCK_SIZE)){
+	    if(0 == curr->size) {
+		curr->size = size;
+		return BLOCK_DATA(curr);
 	    } else {
-		next_fit->next->prev = next_fit;
+		// perform split
+		next_fit = (void *)curr + BLOCK_SIZE + curr->size;
+		next_fit->next = curr->next;
+		next_fit->prev = curr;
+		next_fit->size = size;
+		next_fit->capacity = curr->capacity - curr->size - BLOCK_SIZE;
+		if(next_fit->next == NULL) { 
+		    block_list_tail = next_fit;
+		} else {
+		    next_fit->next->prev = next_fit;
+		}
+
+		curr->capacity = curr->size;
+		curr->next = next_fit;
+		return BLOCK_DATA(next_fit);
 	    }
 
-	    curr->capacity = curr->size;
-	    curr->next = next_fit;
-	    return BLOCK_DATA(next_fit);
-	}
-
-	if(curr->next == NULL) {
-	    curr = block_list_head;
-	} else {
-	    curr = curr->next;
+	    if(curr->next == NULL) {
+		curr = block_list_head;
+	    } else {
+		curr = curr->next;
+	    }
 	}
     } while(curr != next_fit);
 
@@ -218,7 +223,7 @@ void * vikalloc(size_t size)
 	new_heap_node->size = size;
 	block_list_tail->next = new_heap_node;
 	block_list_tail = new_heap_node;
-	next_fit = new_heap_node;
+	// next_fit = new_heap_node;
 	data_block = BLOCK_DATA(new_heap_node);
     }
 
