@@ -19,6 +19,9 @@
 #define PTR "0x%07lx"
 #define PTR_T PTR "\t" // just a tab
 
+// what sbrk returns on failure
+#define MAP_FAILED ((void *) -1)
+
 // Function prototypes
 void coalesce_up(heap_block_t * ptr);
 
@@ -151,6 +154,13 @@ void * vikalloc(size_t size)
     // This will involve a system call to sbrk()
     if(block_list_head == NULL) {
 	block_list_head = sbrk(size_to_request * min_sbrk_size);
+	if(new_heap_node == MAP_FAILED) {
+	    if(isVerbose) {
+		fprintf(vikalloc_log_stream, "<< %d: %s sbrk failure", __LINE__, __FUNCTION__);
+	    }
+	    errno = ENOMEM;
+	    return NULL;
+	}
 	block_list_head->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
 	block_list_head->size = size;
 	next_fit = block_list_head;
@@ -195,6 +205,13 @@ void * vikalloc(size_t size)
 	// wasn't a space to add our data, make a system call to sbrk to
 	// have more allocated
 	new_heap_node = sbrk(size_to_request * min_sbrk_size);
+	if(new_heap_node == MAP_FAILED) {
+	    if(isVerbose) {
+		fprintf(vikalloc_log_stream, "<< %d: %s sbrk failure", __LINE__, __FUNCTION__);
+	    }
+	    errno = ENOMEM;
+	    return NULL;
+	}
 	new_heap_node->next = NULL;
 	new_heap_node->prev = block_list_tail;
 	new_heap_node->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
