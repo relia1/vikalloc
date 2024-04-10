@@ -15,9 +15,12 @@
 // Returns 0 (false) if the block is NOT free, else 1 (true).
 #define IS_FREE(__curr) ((__curr -> size) == 0)
 
-// A noce macro for formatting pointer values.
+// A nice macro for formatting pointer values.
 #define PTR "0x%07lx"
 #define PTR_T PTR "\t" // just a tab
+
+// Function prototypes
+void coalesce_up(heap_block_t * ptr);
 
 // Some variables that repesent (internally) global pointers to the
 // list in the heap.
@@ -61,12 +64,12 @@ size_t vikalloc_set_min(size_t size)
 {
     // Don't change this.
     if (0 == size) {
-        // just return the current value
-        return min_sbrk_size;
+	// just return the current value
+	return min_sbrk_size;
     }
     if (size < (BLOCK_SIZE + BLOCK_SIZE)) {
-        // In the event that it is set to something silly small.
-        size = MAX(BLOCK_SIZE + BLOCK_SIZE, SILLY_SBRK_SIZE);
+	// In the event that it is set to something silly small.
+	size = MAX(BLOCK_SIZE + BLOCK_SIZE, SILLY_SBRK_SIZE);
     }
     min_sbrk_size = size;
 
@@ -78,25 +81,25 @@ void vikalloc_set_algorithm(vikalloc_fit_algorithm_t algorithm)
     // Don't change this.
     fit_algorithm = algorithm;
     if (isVerbose) {
-        switch (algorithm) {
-        case FIRST_FIT:
-            fprintf(vikalloc_log_stream, "** First fit selected\n");
-            break;
-        case BEST_FIT:
-            fprintf(vikalloc_log_stream, "** Best fit selected\n");
-            break;
-        case WORST_FIT:
-            fprintf(vikalloc_log_stream, "** Worst fit selected\n");
-            break;
-        case NEXT_FIT:
-            fprintf(vikalloc_log_stream, "** Next fit selected\n");
-            break;
-        default:
-            fprintf(vikalloc_log_stream, "** Algorithm not recognized %d\n"
-                    , algorithm);
-            fit_algorithm = FIRST_FIT;
-            break;
-        }
+	switch (algorithm) {
+	    case FIRST_FIT:
+		fprintf(vikalloc_log_stream, "** First fit selected\n");
+		break;
+	    case BEST_FIT:
+		fprintf(vikalloc_log_stream, "** Best fit selected\n");
+		break;
+	    case WORST_FIT:
+		fprintf(vikalloc_log_stream, "** Worst fit selected\n");
+		break;
+	    case NEXT_FIT:
+		fprintf(vikalloc_log_stream, "** Next fit selected\n");
+		break;
+	    default:
+		fprintf(vikalloc_log_stream, "** Algorithm not recognized %d\n"
+			, algorithm);
+		fit_algorithm = FIRST_FIT;
+		break;
+	}
     }
 }
 
@@ -105,7 +108,7 @@ void vikalloc_set_verbose(uint8_t verbosity)
     // Don't change this.
     isVerbose = verbosity;
     if (isVerbose) {
-        fprintf(vikalloc_log_stream, "Verbose enabled\n");
+	fprintf(vikalloc_log_stream, "Verbose enabled\n");
     }
 }
 
@@ -122,14 +125,13 @@ void * vikalloc(size_t size)
     void * data_block = NULL;
     heap_block_t * new_heap_node = NULL;
     if (isVerbose) {
-        fprintf(vikalloc_log_stream, ">> %d: %s entry: size = %lu\n"
-                , __LINE__, __FUNCTION__, size);
+	fprintf(vikalloc_log_stream, ">> %d: %s entry: size = %lu\n"
+		, __LINE__, __FUNCTION__, size);
     }
 
-    // printf("size %ld\n", size);
 
     if (0 == size) {
-        return NULL;
+	return NULL;
     }
 
     if(low_water_mark == NULL) {
@@ -139,22 +141,22 @@ void * vikalloc(size_t size)
     // There will always be at least 1 block requested
     // Here we take advantage of integer division to determine the number
     // of additional blocks needed
-    size_to_request = 1 + ((size + BLOCK_SIZE) / min_sbrk_size);
+    size_to_request = ((size + BLOCK_SIZE) / min_sbrk_size);
+    if((size + BLOCK_SIZE) % min_sbrk_size != 0) {
+	size_to_request++;
+    }
+
 
     // Check if our data structure is NULL and initialize it if so
     // This will involve a system call to sbrk()
-    
-    // If after traversal there isn't a place that meets the size requirements
-    // needed, then we have to make a system call to sbrk() for more memory
     if(block_list_head == NULL) {
-	new_heap_node = sbrk(size_to_request * min_sbrk_size);
-	new_heap_node->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
-	new_heap_node->size = size;
-	next_fit = new_heap_node;
-	new_heap_node->next = NULL;
-	new_heap_node->prev = NULL;
-	block_list_head = new_heap_node;
+	block_list_head = sbrk(size_to_request * min_sbrk_size);
+	block_list_head->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
+	block_list_head->size = size;
+	next_fit = block_list_head;
 	block_list_tail = block_list_head;
+	block_list_head->next = NULL;
+	block_list_head->prev = NULL;
 	high_water_mark = sbrk(0);
 	return BLOCK_DATA(next_fit);
     }
@@ -164,7 +166,7 @@ void * vikalloc(size_t size)
     // If there is a spot that already exists that can fufill our request we
     // need to perform a split
     do {
-	if((curr->capacity - curr->size) >= (size + BLOCK_SIZE)){
+	if((curr->capacity - curr->size) > (size + BLOCK_SIZE)){
 	    // perform split
 	    next_fit = (void *)curr + BLOCK_SIZE + curr->size;
 	    next_fit->next = curr->next;
@@ -179,9 +181,7 @@ void * vikalloc(size_t size)
 
 	    curr->capacity = curr->size;
 	    curr->next = next_fit;
-	    data_block = BLOCK_DATA(next_fit);
-	    // break;
-	    return data_block;
+	    return BLOCK_DATA(next_fit);
 	}
 
 	if(curr->next == NULL) {
@@ -199,142 +199,86 @@ void * vikalloc(size_t size)
 	new_heap_node->prev = block_list_tail;
 	new_heap_node->capacity = (size_to_request * min_sbrk_size) - BLOCK_SIZE;
 	new_heap_node->size = size;
-	next_fit = new_heap_node;
 	block_list_tail->next = new_heap_node;
 	block_list_tail = new_heap_node;
-	/*
-	if(new_heap_node->next != NULL) {
-	    new_heap_node->next->prev = new_heap_node;
-	}
-	if(curr == block_list_tail) {
-	    block_list_tail = new_heap_node;
-	}
-	*/
+	next_fit = new_heap_node;
 	data_block = BLOCK_DATA(new_heap_node);
     }
 
     high_water_mark = sbrk(0);
 
-    
+
     if (isVerbose) {
-        fprintf(vikalloc_log_stream, "<< %d: %s exit: size = %lu\n", __LINE__, __FUNCTION__, size);
+	fprintf(vikalloc_log_stream, "<< %d: %s exit: size = %lu\n", __LINE__, __FUNCTION__, size);
     }
 
     return data_block;
 }
 
+
+
 void vikfree(void *ptr)
 {
     heap_block_t *curr = NULL;
-    
+
     if (ptr == NULL) {
-        return;
+	return;
     }
 
     curr = DATA_BLOCK(ptr);
 
     if(curr == NULL) {
-        return;
+	return;
     }
 
     if (IS_FREE(curr)) {
-        if (isVerbose) {
-            fprintf(vikalloc_log_stream, "Block is already free: ptr = " PTR "\n"
-                    , (long) (ptr - low_water_mark));
-        }
-        return;
+	if (isVerbose) {
+	    fprintf(vikalloc_log_stream, "Block is already free: ptr = " PTR "\n"
+		    , (long) (ptr - low_water_mark));
+	}
+	return;
     }
 
     curr->size = 0;
-    // TODO check about next_fit
-    // next_fit = curr;
+    next_fit = curr;
 
-
-    // coalesce
-    // TODO check if I need to coalesce including the wrap around from tail
-    // to head and from head to tail
-    if(curr->next != NULL && IS_FREE(curr->next)) {
-        coalesce_up(curr);
+    if((curr->next != NULL && IS_FREE(curr->next)) && (curr->prev != NULL && IS_FREE(curr->prev))) {
+	curr->next->size = 1;
+	next_fit = curr->prev;
+	coalesce_up(curr->prev);
+    } else if(curr->next != NULL && IS_FREE(curr->next)) {
+	curr->next->size = 1;
+	next_fit = curr;
+	coalesce_up(curr);
+    } else if(curr->prev != NULL && IS_FREE(curr->prev)) {
+	curr->size = 1;
+	next_fit = curr->prev;
+	coalesce_up(curr->prev);
     }
-
-    if(curr->prev != NULL && IS_FREE(curr->prev)) {
-        coalesce_up(curr->prev);
-    }
-
+    
     if (isVerbose) {
-        fprintf(vikalloc_log_stream, "<< %d: %s exit: ptr = %p\n", __LINE__, __FUNCTION__, ptr);
+	fprintf(vikalloc_log_stream, "<< %d: %s exit: ptr = %p\n", __LINE__, __FUNCTION__, ptr);
     }
 }
 
 
 void coalesce_up(heap_block_t * ptr) {
-    heap_block_t *curr = ptr->next;
-
-    if(curr == next_fit) {
-	next_fit = ptr;
+    heap_block_t * next = NULL;
+    if(ptr->size != 0) {
+	return;
+    } else {
+	coalesce_up(ptr->next);
     }
 
-    /*
-    if(curr == block_list_tail) {
+    next = ptr->next;
+    ptr->capacity += next->capacity + BLOCK_SIZE;
+    if(next->next) {
+	next->next->prev = ptr;
+    } else {
 	block_list_tail = ptr;
     }
-    */
-    if(curr->next != NULL) {
-	curr->next->prev = ptr;
-    }
 
-    ptr->next = curr->next;
-    curr->prev = NULL;
-    curr->next = NULL;
-    ptr->capacity += BLOCK_SIZE + curr->capacity;
-    
-    /*
-    // coalesce with previous and next blocks if they are free
-    if((curr->prev != NULL && IS_FREE(curr->prev)) && (curr->next != NULL && IS_FREE(curr->next))) {
-        heap_block_t * prev = curr->prev;
-        heap_block_t * next = curr->next;
-        size_t curr_mem_reclaimed = curr->capacity + BLOCK_SIZE;
-        size_t next_mem_reclaimed = next->capacity + BLOCK_SIZE;
-        prev->capacity += curr_mem_reclaimed + next_mem_reclaimed;
-
-        prev->next = next->next;
-        if(next->next != NULL) {
-            next->next->prev = prev;
-        }
-        if(next == block_list_tail) {
-            block_list_tail = prev;
-            prev->next = NULL;
-        }
-    }// else
-    
-    if(curr->next != NULL && IS_FREE(curr->next)) {
-        heap_block_t * next = curr->next;
-        curr->capacity += next->capacity + BLOCK_SIZE;
-        curr->next = next->next;
-        if(next->next != NULL) {
-            next->next->prev = curr;
-        } else {
-            block_list_tail = curr;
-        }
-        next->next = NULL;
-        next->prev = NULL;
-        next->size = 0;
-        next->capacity = 0;
-    }
-
-    if(curr->prev != NULL && IS_FREE(curr->prev)) {
-        heap_block_t * prev = curr->prev;
-        prev->capacity += curr->capacity + BLOCK_SIZE;
-        prev->next = curr->next;
-        if(curr->next != NULL) {
-            curr->next->prev = prev;
-        }
-        curr->next = NULL;
-        curr->prev = NULL;
-        curr->size = 0;
-        curr->capacity = 0;
-    }
-    */
+    ptr->next = next->next;
 }
 
 
@@ -343,10 +287,10 @@ void coalesce_up(heap_block_t * ptr) {
 void vikalloc_reset(void)
 {
     if (low_water_mark != NULL) {
-        if (isVerbose) {
-            fprintf(vikalloc_log_stream, "*** Resetting all vikalloc space ***\n");
-        }
-	
+	if (isVerbose) {
+	    fprintf(vikalloc_log_stream, "*** Resetting all vikalloc space ***\n");
+	}
+
 	brk(low_water_mark);
 	high_water_mark = low_water_mark;
 
@@ -371,8 +315,8 @@ void * vikrealloc(void *ptr, size_t size)
 {
     heap_block_t *curr = NULL;
     void * new_heap_node = NULL;
-    void * heap_node_data = NULL;
-    size_t old_size = 0;
+    // void * heap_node_data = NULL;
+    // size_t old_size = 0;
 
     if(ptr == NULL) {
 	return vikalloc(size);
