@@ -2,7 +2,7 @@
 Used https://www.makeareadme.com/ as a reference for making this readme
 -->
 # Vikalloc
-Vikalloc is a simple heap implementation using the next-fit algorithm.
+Vikalloc is a simple heap implementation in C using the next-fit algorithm.
 
 ## Installation
 `make`
