@@ -1,7 +1,8 @@
-// Robert Elia
+// Robert Elia 2024
 // relia@pdx.edu
 
 #include "vikalloc.h"
+
 // Returns the size of the structure, in bytes.
 #define BLOCK_SIZE (sizeof(heap_block_t))
 
@@ -21,6 +22,7 @@
 #define CURR_EXCESS_CAPACITY(__curr) (__curr->capacity - __curr->size)
 
 // Function prototypes
+// Recursive function that combines adjacent free blocks
 void coalesce_up(heap_block_t * ptr);
 
 // Some variables that repesent (internally) global pointers to the
@@ -175,6 +177,8 @@ void * vikalloc(size_t size)
     // need to perform a split
     do {
 	if((CURR_EXCESS_CAPACITY(curr)) >= (size + BLOCK_SIZE)) {
+	    // There exists an already freed heap node, so we can use this
+	    // without needing to split
 	    if(0 == curr->size) {
 		curr->size = size;
 		next_fit = curr;
@@ -245,6 +249,7 @@ void vikfree(void *ptr)
 	return;
     }
 
+    // Get the data structure that holds the passed in data
     curr = DATA_BLOCK(ptr);
 
     if(curr == NULL) {
@@ -262,6 +267,18 @@ void vikfree(void *ptr)
     curr->size = 0;
     next_fit = curr;
 
+    // Check for the three scenarios which we coalesce
+    //   If curr->next and curr->prev both are of size 0
+    //   Mark curr->next->size with a dummy value we can use to stop our recursive traversal
+    //   Recursively coalesce up from curr->prev
+    //
+    //   If curr->next is of size 0
+    //   Mark curr->next->size with a dummy value we can use to stop our recursive traversal
+    //   Recursively coalesce up from curr
+    //
+    //   If curr->previous is of size 0
+    //   Mark curr->size with a dummy value we can use to stop our recursive traversal
+    //   Recursively coalesce up from curr->prev
     if((curr->next != NULL && IS_FREE(curr->next)) && (curr->prev != NULL && IS_FREE(curr->prev))) {
 	curr->next->size = 1;
 	next_fit = curr->prev;
@@ -335,14 +352,12 @@ void * vikrealloc(void *ptr, size_t size)
 {
     heap_block_t *curr = NULL;
     void * new_heap_node = NULL;
-    // void * heap_node_data = NULL;
-    // size_t old_size = 0;
 
     if(ptr == NULL) {
 	return vikalloc(size);
     }
 
-    if(size == 0) {
+    if(0 == size) {
 	vikfree(ptr);
 	return NULL;
     }
