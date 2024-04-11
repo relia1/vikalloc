@@ -20,8 +20,6 @@
 
 #define CURR_EXCESS_CAPACITY(__curr) (__curr->capacity - __curr->size)
 
-#define CURR_EXCESS_CAPACITY(__curr) (__curr->capacity - __curr->size)
-
 // Function prototypes
 void coalesce_up(heap_block_t * ptr);
 
