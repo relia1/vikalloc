@@ -155,7 +155,7 @@ void * vikalloc(size_t size)
     // This will involve a system call to sbrk()
     if(block_list_head == NULL) {
 	block_list_head = sbrk(size_to_request * min_sbrk_size);
-	if(new_heap_node == MAP_FAILED) {
+	if(new_heap_node == (void *)-1) {
 	    if(isVerbose) {
 		fprintf(vikalloc_log_stream, "<< %d: %s sbrk failure", __LINE__, __FUNCTION__);
 	    }
@@ -199,7 +199,7 @@ void * vikalloc(size_t size)
 		curr->next = next_fit;
 		return BLOCK_DATA(next_fit);
 	    }
-
+	} else {
 	    if(curr->next == NULL) {
 		curr = block_list_head;
 	    } else {
@@ -212,7 +212,7 @@ void * vikalloc(size_t size)
 	// wasn't a space to add our data, make a system call to sbrk to
 	// have more allocated
 	new_heap_node = sbrk(size_to_request * min_sbrk_size);
-	if(new_heap_node == MAP_FAILED) {
+	if(new_heap_node == (void *)-1) {
 	    if(isVerbose) {
 		fprintf(vikalloc_log_stream, "<< %d: %s sbrk failure", __LINE__, __FUNCTION__);
 	    }
@@ -225,7 +225,6 @@ void * vikalloc(size_t size)
 	new_heap_node->size = size;
 	block_list_tail->next = new_heap_node;
 	block_list_tail = new_heap_node;
-	// next_fit = new_heap_node;
 	data_block = BLOCK_DATA(new_heap_node);
     }
 
