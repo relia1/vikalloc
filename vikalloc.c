@@ -1,8 +1,7 @@
-// R. Jesse Chaney
-// rchaney@pdx.edu
+// Robert Elia
+// relia@pdx.edu
 
 #include "vikalloc.h"
-#include <string.h>
 // Returns the size of the structure, in bytes.
 #define BLOCK_SIZE (sizeof(heap_block_t))
 
@@ -361,15 +360,13 @@ void * vikrealloc(void *ptr, size_t size)
 	return NULL;
     }
 
-    // memset(new_heap_node, 0, size);
-    memcpy(new_heap_node, ptr, MIN(size, curr->size));
+    memmove(new_heap_node, ptr, MIN(size, curr->size));
     vikfree(ptr);
     return new_heap_node;
 }
 
 void * vikstrdup(const char *s)
 {
-    // return s? strcpy(vikalloc(strlen(s) + 1), s) : NULL;
     return strcpy(vikalloc(strlen(s)+1), s);
 }
 
