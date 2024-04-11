@@ -19,8 +19,9 @@
 #define PTR "0x%07lx"
 #define PTR_T PTR "\t" // just a tab
 
-// what sbrk returns on failure
-#define MAP_FAILED ((void *) -1)
+#define CURR_EXCESS_CAPACITY(__curr) (__curr->capacity - __curr->size)
+
+#define CURR_EXCESS_CAPACITY(__curr) (__curr->capacity - __curr->size)
 
 // Function prototypes
 void coalesce_up(heap_block_t * ptr);
@@ -176,9 +177,10 @@ void * vikalloc(size_t size)
     // If there is a spot that already exists that can fufill our request we
     // need to perform a split
     do {
-	if((curr->capacity - curr->size) >= (size + BLOCK_SIZE)){
+	if((CURR_EXCESS_CAPACITY(curr)) >= (size + BLOCK_SIZE)) {
 	    if(0 == curr->size) {
 		curr->size = size;
+		next_fit = curr;
 		return BLOCK_DATA(curr);
 	    } else {
 		// perform split
@@ -186,7 +188,7 @@ void * vikalloc(size_t size)
 		next_fit->next = curr->next;
 		next_fit->prev = curr;
 		next_fit->size = size;
-		next_fit->capacity = curr->capacity - curr->size - BLOCK_SIZE;
+		next_fit->capacity = CURR_EXCESS_CAPACITY(curr) - BLOCK_SIZE;
 		if(next_fit->next == NULL) { 
 		    block_list_tail = next_fit;
 		} else {
